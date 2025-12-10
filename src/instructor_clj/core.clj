@@ -70,19 +70,22 @@
    
    Supports multiple LLM providers through litellm-clj 0.3.0-alpha.
    Provider must be specified explicitly via :provider key (e.g., :openai, :anthropic, :gemini)."
-  [{:keys [prompt response-schema max-tokens model temperature api-key provider]}]
+  [{:keys [prompt response-schema max-tokens model temperature api-key api-base provider]}]
   (let [messages [{:role :system
                    :content (schema->system-prompt response-schema)}
                   {:role :user
                    :content prompt}]
         ;; Use API key from environment if not provided
         api-key (or api-key (System/getenv "OPENAI_API_KEY"))
+        api-base (or api-base  "https://api.openai.com/v1")
         ;; Build request map
         request-map {:messages messages
-                     :temperature temperature
-                     :max-tokens max-tokens}
+                     ;:temperature temperature
+                     ;:max-tokens max-tokens
+                     }
         ;; Build config map
-        config {:api-key api-key}
+        config {:api-key api-key
+                :api-base api-base}
         ;; Call litellm with new 0.3.0-alpha API
         body (litellm/completion provider model request-map config)
         response (parse-generated-body body)]
@@ -154,13 +157,15 @@
          provider (:provider client-params)
          ;; Use API key from environment if not provided
          api-key (or (:api-key client-params) (System/getenv "OPENAI_API_KEY"))
+         api-base (or (:api-base client-params)  "https://api.openai.com/v1")
          ;; Build request map from default params and client params
          request-map (-> default-client-params
                          (merge (select-keys client-params [:max-tokens :temperature]))
                          (assoc :messages messages)
                          (dissoc :model))
          ;; Build config map
-         config {:api-key api-key}
+         config {:api-key api-key
+                 :api-base api-base}
          ;; Call litellm with new 0.3.0-alpha API
          body (litellm/completion provider model request-map config)
          response (parse-generated-body body)]
