@@ -12,6 +12,15 @@
                                     :model "gpt-3.5-turbo"})
 
 
+(defn ?assoc
+  "Same as assoc, but skip the assoc if v is nil"
+  [m & kvs]
+  (->> kvs
+       (partition 2)
+       (filter second)
+       (map vec)
+       (into m)))
+
 (defn schema->system-prompt
   "Converts a malli schema into JSON schema and generates a system prompt for responses"
   [schema]
@@ -70,7 +79,8 @@
    
    Supports multiple LLM providers through litellm-clj 0.3.0-alpha.
    Provider must be specified explicitly via :provider key (e.g., :openai, :anthropic, :gemini)."
-  [{:keys [prompt response-schema max-tokens model temperature api-key provider]}]
+  [{:keys [prompt response-schema max-tokens model temperature api-key provider 
+           deployment api-base api-version]}]
   (let [messages [{:role :system
                    :content (schema->system-prompt response-schema)}
                   {:role :user
@@ -82,7 +92,12 @@
                      :temperature temperature
                      :max-tokens max-tokens}
         ;; Build config map
-        config {:api-key api-key}
+        config (-> {:api-key api-key}
+                   (?assoc :deployment deployment)
+                   (?assoc :api-base api-base)
+                   (?assoc :api-version api-version))
+
+
         ;; Call litellm with new 0.3.0-alpha API
         body (litellm/completion provider model request-map config)
         response (parse-generated-body body)]
@@ -160,7 +175,10 @@
                          (assoc :messages messages)
                          (dissoc :model))
          ;; Build config map
-         config {:api-key api-key}
+         config (-> {:api-key api-key}
+                    (?assoc :deployment (:deployment client-params))
+                    (?assoc :api-base (:api-base client-params))
+                    (?assoc :api-version (:api-version client-params)))
          ;; Call litellm with new 0.3.0-alpha API
          body (litellm/completion provider model request-map config)
          response (parse-generated-body body)]
@@ -204,7 +222,7 @@
             :max-retries 2
             :api-key (System/getenv "OPENAI_API_KEY"))
   ;; => {:action "call", :person "Kapil", :time "12pm", :day "Saturday"}
-
+  
   ;; Using create-chat-completion (more explicit)
   (create-chat-completion
    {:messages [{:role "user" :content "Call Kapil on Saturday at 12pm"}]
@@ -224,7 +242,34 @@
   ;; Set environment variable: export GEMINI_API_KEY=your-api-key
   (create-chat-completion
    {:messages [{:role "user" :content "Jason Liu is 30 years old"}]
-    :model "gemini-pro"
+    :model "gemini-3-pro-preview"
     :provider :gemini
+    :api-key (System/getenv "GEMINI_API_KEY")
     :response-model User})
+
+  
+  ;; Using Azure OpenAI
+  ;; set environemnt variable AZURE_OPENAI_API_KEY
+  ;; AZURE_OPENAI_API_BASE, AZURE_OPENAI_DEPLOYMENT can be used as well
+  ;; instead of hardcoding
+  (instruct "John Doe is 30 years old."
+            User
+            :provider :azure
+            :deployment "gpt-4.1"
+            :model "gpt-4.1"
+            :api-key (System/getenv "AZURE_OPENAI_API_KEY")
+            :api-version "2024-12-01-preview"
+            :api-base "https://efsaopenai-se.openai.azure.com"
+            :max-retries 0)
+
+
+  (create-chat-completion
+   {:messages [{:role "user" :content "Call Kapil on Saturday at 12pm"}]
+    :model "gpt-4.1"
+    :provider :azure
+    :api-base "https://efsaopenai-se.openai.azure.com"
+    :deployment "gpt-4.1"
+    :api-version "2024-12-01-preview"
+    :api-key (System/getenv "AZURE_OPENAI_API_KEY")
+    :response-model Meeting})
   )
