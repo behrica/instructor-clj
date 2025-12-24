@@ -67,16 +67,13 @@
    
    Supports multiple LLM providers through litellm-clj 0.3.0-alpha.
    Provider must be specified explicitly via :provider key (e.g., :openai, :anthropic, :gemini)."
-  [{:keys [prompt response-schema provider] :as params}]
+  [{:keys [prompt response-schema provider model] :as params}]
   (let [messages [{:role :system
                    :content (schema->system-prompt response-schema)}
                   {:role :user
                    :content prompt}]
-        model (:model params)
-        config (-> params
-                   (dissoc [:model :prompt :response-schema :max-retries :provider]))
+        config (dissoc params [:model :prompt :response-schema :max-retries :provider])
 
-        ;; Use API key from environment if not provided
         ;; Build request map
         request-map {:messages messages}
         ;; Call litellm with new 0.3.0-alpha API
@@ -85,8 +82,6 @@
     (when (m/validate response-schema response)
       response)))
 
-(keys params)
-;;=> (:provider :api-key :max-retries :prompt :response-schema)
 
 (defn instruct
   "Attempts to obtain a valid response from the LLM based on the given prompt and schema,
@@ -97,11 +92,10 @@
    & {:keys [max-retries] :as client-params
       :or {max-retries 0}}]
   (loop [retries-left max-retries]
-    (let [params (merge 
+    (let [params (merge
                   client-params
                   {:prompt prompt
-                   :response-schema response-schema
-                   })
+                   :response-schema response-schema})
           response (llm->response params)]
       (if (and (nil? response)
                (pos? retries-left))
@@ -172,7 +166,7 @@
 (comment
 
   ;; Set environment variable: export OPENAI_API_KEY=your-api-key
-  
+
   (def User
     [:map
      [:name :string]
@@ -205,7 +199,7 @@
             :max-retries 2
             :api-key (System/getenv "OPENAI_API_KEY"))
   ;; => {:action "call", :person "Kapil", :time "12pm", :day "Saturday"}
-  
+
   ;; Using create-chat-completion (more explicit)
   (create-chat-completion
    {:messages [{:role "user" :content "Call Kapil on Saturday at 12pm"}]
@@ -241,9 +235,9 @@
             :api-version "2024-12-01-preview"
             :api-base "https://efsaopenai-se.openai.azure.com"
             :max-retries 0)
-  
+
   ;; even GPT-5 works
-    (instruct "John Doe is 30 years old."
+  (instruct "John Doe is 30 years old."
             User
             :provider :azure
             :deployment "gpt-5"
@@ -251,6 +245,4 @@
             :api-key (System/getenv "AZURE_OPENAI_API_KEY")
             :api-version "2024-12-01-preview"
             :api-base "https://efsaopenai-se.openai.azure.com"
-            :max-retries 0)
-
-  )
+            :max-retries 0))
