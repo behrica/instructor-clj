@@ -7,9 +7,6 @@
             [stencil.core :as sc])
   (:import [com.fasterxml.jackson.core JsonParseException]))
 
-(def ^:const default-client-params {:max-tokens 4096
-                                    :temperature 0.7
-                                    :model "gpt-3.5-turbo"})
 
 
 (defn schema->system-prompt
@@ -70,25 +67,26 @@
    
    Supports multiple LLM providers through litellm-clj 0.3.0-alpha.
    Provider must be specified explicitly via :provider key (e.g., :openai, :anthropic, :gemini)."
-  [{:keys [prompt response-schema max-tokens model temperature api-key provider]}]
+  [{:keys [prompt response-schema provider] :as params}]
   (let [messages [{:role :system
                    :content (schema->system-prompt response-schema)}
                   {:role :user
                    :content prompt}]
+        model (:model params)
+        config (-> params
+                   (dissoc [:model :prompt :response-schema :max-retries :provider]))
+
         ;; Use API key from environment if not provided
-        api-key (or api-key (System/getenv "OPENAI_API_KEY"))
         ;; Build request map
-        request-map {:messages messages
-                     :temperature temperature
-                     :max-tokens max-tokens}
-        ;; Build config map
-        config {:api-key api-key}
+        request-map {:messages messages}
         ;; Call litellm with new 0.3.0-alpha API
         body (litellm/completion provider model request-map config)
         response (parse-generated-body body)]
     (when (m/validate response-schema response)
       response)))
 
+(keys params)
+;;=> (:provider :api-key :max-retries :prompt :response-schema)
 
 (defn instruct
   "Attempts to obtain a valid response from the LLM based on the given prompt and schema,
@@ -96,14 +94,14 @@
    
    Note: API keys can be provided via :api-key parameter or OPENAI_API_KEY environment variable."
   [prompt response-schema
-   & {:keys [api-key _max-tokens _model _temperature max-retries] :as client-params
+   & {:keys [max-retries] :as client-params
       :or {max-retries 0}}]
   (loop [retries-left max-retries]
-    (let [params (merge default-client-params
-                        client-params
-                        {:prompt prompt
-                         :response-schema response-schema
-                         :api-key api-key})
+    (let [params (merge 
+                  client-params
+                  {:prompt prompt
+                   :response-schema response-schema
+                   })
           response (llm->response params)]
       (if (and (nil? response)
                (pos? retries-left))
@@ -152,15 +150,16 @@
          model (:model client-params)
          ;; Provider must be explicitly provided
          provider (:provider client-params)
-         ;; Use API key from environment if not provided
-         api-key (or (:api-key client-params) (System/getenv "OPENAI_API_KEY"))
+
          ;; Build request map from default params and client params
-         request-map (-> default-client-params
-                         (merge (select-keys client-params [:max-tokens :temperature]))
-                         (assoc :messages messages)
-                         (dissoc :model))
+         request-map (->
+                      (merge {})
+                      (assoc :messages messages)
+                      (dissoc :model))
          ;; Build config map
-         config {:api-key api-key}
+         config (-> client-params
+                    (dissoc [:model :prompt :response-schema :max-retries :provider]))
+
          ;; Call litellm with new 0.3.0-alpha API
          body (litellm/completion provider model request-map config)
          response (parse-generated-body body)]
@@ -182,7 +181,9 @@
   ;; Using the instruct function (simplified API)
   (instruct "John Doe is 30 years old."
             User
+            :model "gpt-5"
             :provider :openai
+            :api-key (System/getenv "OPENAI_API_KEY")
             :max-retries 0)
 
   (def Meeting
@@ -204,12 +205,13 @@
             :max-retries 2
             :api-key (System/getenv "OPENAI_API_KEY"))
   ;; => {:action "call", :person "Kapil", :time "12pm", :day "Saturday"}
-
+  
   ;; Using create-chat-completion (more explicit)
   (create-chat-completion
    {:messages [{:role "user" :content "Call Kapil on Saturday at 12pm"}]
     :model "gpt-3.5-turbo"
     :provider :openai
+    :api-key (System/getenv "OPENAI_API_KEY")
     :response-model Meeting})
 
   ;; Using Anthropic Claude
@@ -224,7 +226,31 @@
   ;; Set environment variable: export GEMINI_API_KEY=your-api-key
   (create-chat-completion
    {:messages [{:role "user" :content "Jason Liu is 30 years old"}]
-    :model "gemini-pro"
+    :model "gemini-3-pro-preview"
     :provider :gemini
+    :api-key (System/getenv "GEMINI_API_KEY")
     :response-model User})
+
+  ;; azure works 
+  (instruct "John Doe is 30 years old."
+            User
+            :provider :azure
+            :deployment "gpt-4.1"
+            :model "gpt-4.1"
+            :api-key (System/getenv "AZURE_OPENAI_API_KEY")
+            :api-version "2024-12-01-preview"
+            :api-base "https://efsaopenai-se.openai.azure.com"
+            :max-retries 0)
+  
+  ;; even GPT-5 works
+    (instruct "John Doe is 30 years old."
+            User
+            :provider :azure
+            :deployment "gpt-5"
+            :model "gpt-5"
+            :api-key (System/getenv "AZURE_OPENAI_API_KEY")
+            :api-version "2024-12-01-preview"
+            :api-base "https://efsaopenai-se.openai.azure.com"
+            :max-retries 0)
+
   )
