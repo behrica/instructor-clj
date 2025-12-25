@@ -8,7 +8,6 @@
   (:import [com.fasterxml.jackson.core JsonParseException]))
 
 
-
 (defn schema->system-prompt
   "Converts a malli schema into JSON schema and generates a system prompt for responses"
   [schema]
@@ -20,6 +19,7 @@
     \n\n
     Make sure to return an instance of only the JSON.
     Refrain from returning the schema or any text explaining the JSON"
+
    {:schema (json-schema/transform schema)}))
 
 
@@ -67,20 +67,24 @@
    
    Supports multiple LLM providers through litellm-clj 0.3.0-alpha.
    Provider must be specified explicitly via :provider key (e.g., :openai, :anthropic, :gemini)."
-  [{:keys [prompt response-schema provider model] :as params}]
+  [params config]
   (let [messages [{:role :system
-                   :content (schema->system-prompt response-schema)}
+                   :content (schema->system-prompt (:response-schema params))}
                   {:role :user
-                   :content prompt}]
-        config (dissoc params [:model :prompt :response-schema :max-retries :provider])
+                   :content (:prompt params)}]
+        model (:model params)
+        provider (:provider params)
+        
 
         ;; Build request map
         request-map {:messages messages}
         ;; Call litellm with new 0.3.0-alpha API
+        
         body (litellm/completion provider model request-map config)
         response (parse-generated-body body)]
-    (when (m/validate response-schema response)
+    (when (m/validate (:response-schema params) response)
       response)))
+
 
 
 (defn instruct
@@ -88,15 +92,11 @@
    retrying up to `max-retries` times if necessary.
    
    Note: API keys can be provided via :api-key parameter or OPENAI_API_KEY environment variable."
-  [prompt response-schema
-   & {:keys [max-retries] :as client-params
-      :or {max-retries 0}}]
+  [{:keys [max-retries] :or {max-retries 0} :as params}
+   
+   config]
   (loop [retries-left max-retries]
-    (let [params (merge
-                  client-params
-                  {:prompt prompt
-                   :response-schema response-schema})
-          response (llm->response params)]
+    (let [response (llm->response params  config)]
       (if (and (nil? response)
                (pos? retries-left))
         (recur (dec retries-left))
@@ -134,25 +134,20 @@
      :response-model User})
 
    Returns a map with extracted information in a structured format."
-  ([client-params]
-   (let [response-model (:response-model client-params)
+  ([params config]
+   (let [response-model (:response-schema params)
          ;; Normalize messages to ensure roles are keywords (required by litellm-clj 0.3.0-alpha)
-         user-messages (normalize-messages (:messages client-params))
+         user-messages (normalize-messages (:messages params))
          messages (apply conj
                          [{:role :system :content (schema->system-prompt response-model)}]
                          user-messages)
-         model (:model client-params)
+         model (:model params)
          ;; Provider must be explicitly provided
-         provider (:provider client-params)
+         provider (:provider params)
 
          ;; Build request map from default params and client params
-         request-map (->
-                      (merge {})
-                      (assoc :messages messages)
-                      (dissoc :model))
+         request-map {:messages messages}
          ;; Build config map
-         config (-> client-params
-                    (dissoc [:model :prompt :response-schema :max-retries :provider]))
 
          ;; Call litellm with new 0.3.0-alpha API
          body (litellm/completion provider model request-map config)
@@ -166,19 +161,20 @@
 (comment
 
   ;; Set environment variable: export OPENAI_API_KEY=your-api-key
-
+  
   (def User
     [:map
      [:name :string]
      [:age :int]])
 
   ;; Using the instruct function (simplified API)
-  (instruct "John Doe is 30 years old."
-            User
-            :model "gpt-5"
-            :provider :openai
-            :api-key (System/getenv "OPENAI_API_KEY")
-            :max-retries 0)
+  (instruct
+   {:prompt "John Doe is 30 years old."
+    :response-schema User
+    :max-retries 3
+    :provider :openai
+    :model "gpt-4"}
+   {:api-key (System/getenv "OPENAI_API_KEY")})
 
   (def Meeting
     [:map
@@ -192,29 +188,30 @@
             [:string]]]])
 
   ;; Using OpenAI model
-  (instruct "Call Kapil on Saturday at 12pm"
-            Meeting
-            :provider :openai
-            :model "gpt-4"
-            :max-retries 2
-            :api-key (System/getenv "OPENAI_API_KEY"))
+  (instruct {:prompt "Call Kapil on Saturday at 12pm"
+             :response-schema Meeting
+             :provider :openai
+             :model "gpt-4"
+             :max-retries 2}
+            {:api-key (System/getenv "OPENAI_API_KEY")})
   ;; => {:action "call", :person "Kapil", :time "12pm", :day "Saturday"}
-
+  
   ;; Using create-chat-completion (more explicit)
   (create-chat-completion
    {:messages [{:role "user" :content "Call Kapil on Saturday at 12pm"}]
-    :model "gpt-3.5-turbo"
+    :response-schema Meeting
     :provider :openai
-    :api-key (System/getenv "OPENAI_API_KEY")
-    :response-model Meeting})
+    :model "gpt-3.5-turbo"}
+   {:api-key (System/getenv "OPENAI_API_KEY")})
 
   ;; Using Anthropic Claude
   ;; Set environment variable: export ANTHROPIC_API_KEY=your-api-key
   (create-chat-completion
    {:messages [{:role "user" :content "Jason Liu is 30 years old"}]
-    :model "claude-3-opus-20240229"
+    :model "claude-sonnet-4-20250514"
     :provider :anthropic
-    :response-model User})
+    :response-schema User}
+   {:api-key (System/getenv "ANTHROPIC_API_KEY")})
 
   ;; Using Google Gemini
   ;; Set environment variable: export GEMINI_API_KEY=your-api-key
@@ -222,27 +219,31 @@
    {:messages [{:role "user" :content "Jason Liu is 30 years old"}]
     :model "gemini-3-pro-preview"
     :provider :gemini
-    :api-key (System/getenv "GEMINI_API_KEY")
-    :response-model User})
+    :response-schema User}
+   {:api-key (System/getenv "GEMINI_API_KEY")})
 
   ;; azure works 
-  (instruct "John Doe is 30 years old."
-            User
-            :provider :azure
-            :deployment "gpt-4.1"
-            :model "gpt-4.1"
-            :api-key (System/getenv "AZURE_OPENAI_API_KEY")
-            :api-version "2024-12-01-preview"
-            :api-base "https://efsaopenai-se.openai.azure.com"
-            :max-retries 0)
+  (instruct
+   {:prompt "John Doe is 30 years old."
+    :response-schema User
+    :provider :azure
+    :model "gpt-4.1"
+    :max-retries 0}
 
-  ;; even GPT-5 works
-  (instruct "John Doe is 30 years old."
-            User
-            :provider :azure
-            :deployment "gpt-5"
-            :model "gpt-5"
-            :api-key (System/getenv "AZURE_OPENAI_API_KEY")
-            :api-version "2024-12-01-preview"
-            :api-base "https://efsaopenai-se.openai.azure.com"
-            :max-retries 0))
+   {:deployment "gpt-4.1"
+    :api-key (System/getenv "AZURE_OPENAI_API_KEY")
+    :api-version "2024-12-01-preview"
+    :api-base "https://efsaopenai-se.openai.azure.com"})
+
+  ;; even Azure GPT-5 works
+  (instruct
+   {:prompt "John Doe is 30 years old."
+    :response-schema User
+    :provider :azure
+    :model "gpt-5"
+    :max-retries 0}
+   {:deployment "gpt-5"
+    :api-key (System/getenv "AZURE_OPENAI_API_KEY")
+    :api-version "2024-12-01-preview"
+    :api-base "https://efsaopenai-se.openai.azure.com"})
+  )
