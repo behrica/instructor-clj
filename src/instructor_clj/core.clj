@@ -4,7 +4,9 @@
             [litellm.core :as litellm]
             [malli.core :as m]
             [malli.json-schema :as json-schema]
-            [stencil.core :as sc])
+            [stencil.core :as sc]
+            [malli.instrument :as mi]
+            )
   (:import [com.fasterxml.jackson.core JsonParseException]))
 
 
@@ -92,9 +94,17 @@
    retrying up to `max-retries` times if necessary.
    
    Note: API keys can be provided via :api-key parameter or OPENAI_API_KEY environment variable."
-  [{:keys [max-retries] :or {max-retries 0} :as params}
-   
-   config]
+  {:malli/schema [:=> [:cat 
+                       [:map {:closed true}
+                        [:prompt :string]
+                        [:response-schema :any]
+                        [:max-retries {:optional true} :int]
+                        [:provider :keyword]
+                        [:model :string]
+                        ]
+                       :map] :any]}
+  [{:keys [max-retries] :or {max-retries 0} :as params} config]
+  
   (loop [retries-left max-retries]
     (let [response (llm->response params  config)]
       (if (and (nil? response)
@@ -134,6 +144,14 @@
      :response-model User})
 
    Returns a map with extracted information in a structured format."
+  {:malli/schema [:=> [:cat
+                       [:map {:closed true}
+                        [:response-schema :any]
+                        [:messages [:sequential :map]]
+                        [:max-retries {:optional true} :int]
+                        [:provider :keyword]
+                        [:model :string]]
+                       :map] :any]}
   ([params config]
    (let [response-model (:response-schema params)
          ;; Normalize messages to ensure roles are keywords (required by litellm-clj 0.3.0-alpha)
@@ -157,11 +175,17 @@
        body))))
 
 
-;; Example usage
+(mi/collect!)
+(mi/instrument!)
+
+;; example usage
 (comment
+  (require '[malli.dev.pretty :as pretty])
+  
+  (mi/instrument! {:report (pretty/thrower)})
 
   ;; Set environment variable: export OPENAI_API_KEY=your-api-key
-  
+
   (def User
     [:map
      [:name :string]
@@ -195,7 +219,7 @@
              :max-retries 2}
             {:api-key (System/getenv "OPENAI_API_KEY")})
   ;; => {:action "call", :person "Kapil", :time "12pm", :day "Saturday"}
-  
+
   ;; Using create-chat-completion (more explicit)
   (create-chat-completion
    {:messages [{:role "user" :content "Call Kapil on Saturday at 12pm"}]
