@@ -97,7 +97,9 @@
   {:malli/schema [:=> [:cat 
                        [:map {:closed true}
                         [:prompt :string]
-                        [:response-schema :any]
+                        [:response-schema [:fn 
+                                           {:error/message {:en "Should be malli schema"}}
+                                           (fn [x] (m/schema? (m/schema x)))]]
                         [:max-retries {:optional true} :int]
                         [:provider :keyword]
                         [:model :string]
@@ -146,8 +148,13 @@
    Returns a map with extracted information in a structured format."
   {:malli/schema [:=> [:cat
                        [:map {:closed true}
-                        [:response-schema :any]
-                        [:messages [:sequential :map]]
+                        [:response-schema [:fn 
+                                           {:error/message {:en "Should be malli schema"}}
+                                           (fn [x] (m/schema? (m/schema x)))]]
+                        [:messages [:sequential [:map {:closed true}
+                                                 [:role [:or :keyword :string]]
+                                                 [:content :string]
+                                                 ]]]
                         [:max-retries {:optional true} :int]
                         [:provider :keyword]
                         [:model :string]]
@@ -185,12 +192,12 @@
   (mi/instrument! {:report (pretty/thrower)})
 
   ;; Set environment variable: export OPENAI_API_KEY=your-api-key
-
+  
   (def User
     [:map
      [:name :string]
      [:age :int]])
-
+  
   ;; Using the instruct function (simplified API)
   (instruct
    {:prompt "John Doe is 30 years old."
@@ -219,7 +226,7 @@
              :max-retries 2}
             {:api-key (System/getenv "OPENAI_API_KEY")})
   ;; => {:action "call", :person "Kapil", :time "12pm", :day "Saturday"}
-
+  
   ;; Using create-chat-completion (more explicit)
   (create-chat-completion
    {:messages [{:role "user" :content "Call Kapil on Saturday at 12pm"}]
