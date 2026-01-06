@@ -24,12 +24,12 @@
       (let [User [:map
                   [:name :string]
                   [:age :int]]
-            response (icc/instruct "John Doe is 30 years old."
-                                   User
-                                   :api-key api-key
-                                   :provider :openai
-                                   :model "gpt-3.5-turbo"
-                                   :max-retries 0)]
+            response (icc/instruct {:prompt "John Doe is 30 years old."
+                                    :response-schema User
+                                    :provider :openai
+                                    :model "gpt-3.5-turbo"
+                                    :max-retries 0}
+                                   {:api-key api-key})]
         (is (some? response) "Response should not be nil")
         (is (= "John Doe" (:name response)) "Name should be extracted correctly")
         (is (= 30 (:age response)) "Age should be extracted correctly")))))
@@ -48,12 +48,12 @@
                      [:day [:and {:description "Day of the week"}
                             [:string]]]]
             response (icc/create-chat-completion
-                      {:messages [{:role "user" 
+                      {:messages [{:role "user"
                                    :content "Call Kapil on Saturday at 12pm"}]
                        :model "gpt-3.5-turbo"
                        :provider :openai
-                       :response-model Meeting
-                       :api-key api-key})]
+                       :response-scfhema Meeting}
+                      {:api-key api-key})]
         (is (some? response) "Response should not be nil")
         (is (= "call" (:action response)) "Action should be 'call'")
         (is (= "Kapil" (:person response)) "Person should be 'Kapil'")
@@ -69,12 +69,12 @@
                   [:age :int]]]
         
         ;; Test with OpenAI with explicit provider
-        (let [response (icc/instruct "Alice Smith is 25 years old."
-                                     User
-                                     :api-key api-key
-                                     :provider :openai
-                                     :model "gpt-3.5-turbo"
-                                     :max-retries 0)]
+        (let [response (icc/instruct {:prompt "Alice Smith is 25 years old."
+                                      :reponse-schema User
+                                      :provider :openai
+                                      :model "gpt-3.5-turbo"
+                                      :max-retries 0}
+                                     {:api-key api-key})]
           (is (some? response) "OpenAI response should not be nil")
           (is (string? (:name response)) "Name should be a string")
           (is (int? (:age response)) "Age should be an integer"))
@@ -107,8 +107,8 @@
                       {:messages [{:role "user" :content prompt}]
                        :model "gpt-4o-mini"
                        :provider :openai
-                       :response-model Person
-                       :api-key api-key})]
+                       :response-schema Person}
+                      {:api-key api-key})]
         (is (some? response) "Response should not be nil")
         (is (string? (:name response)) "Name should be a string")
         (is (int? (:age response)) "Age should be an integer")
@@ -124,12 +124,12 @@
                 [:name :string]
                 [:age :int]]]
       (try
-        (icc/instruct "John Doe is 30 years old."
-                      User
-                      :api-key "invalid-api-key"
-                      :provider :openai
-                      :model "gpt-3.5-turbo"
-                      :max-retries 0)
+        (icc/instruct {:prompt "John Doe is 30 years old."
+                       :reponse-schema User
+                       :provider :openai
+                       :model "gpt-3.5-turbo"
+                       :max-retries 0}
+                      {:api-key "invalid-api-key"})
         (is false "Should have thrown an exception")
         (catch Exception e
           (is (some? e) "Exception should be thrown for invalid API key"))))))
@@ -142,12 +142,12 @@
                   [:name :string]
                   [:age :int]]
             ;; This should succeed even with retries enabled
-            response (icc/instruct "Sarah Wilson is 28 years old."
-                                   User
-                                   :api-key api-key
-                                   :provider :openai
-                                   :model "gpt-3.5-turbo"
-                                   :max-retries 2)]
+            response (icc/instruct {:prompt "Sarah Wilson is 28 years old."
+                                    :response-schema User
+                                    :provider :openai
+                                    :model "gpt-3.5-turbo"
+                                    :max-retries 2}
+                                   {:api-key api-key})]
         (is (some? response) "Response should not be nil with retries")
         (is (string? (:name response)) "Name should be extracted")
         (is (int? (:age response)) "Age should be extracted")))))
@@ -159,12 +159,13 @@
       (let [User [:map
                   [:name :string]
                   [:age :int]]
-            response (icc/instruct "Emily Brown is 42 years old."
-                                   User
-                                   :api-key anthropic-api-key
-                                   :provider :anthropic
-                                   :model "claude-3-haiku-20240307"
-                                   :max-retries 0)]
+            response (icc/instruct {:prompt "Emily Brown is 42 years old."
+                                    :response-schema User
+
+                                    :provider :anthropic
+                                    :model "claude-3-haiku-20240307"
+                                    :max-retries 0}
+                                   {:api-key anthropic-api-key})]
         (is (some? response) "Anthropic response should not be nil")
         (is (= "Emily Brown" (:name response)) "Name should be extracted correctly")
         (is (= 42 (:age response)) "Age should be extracted correctly")))))
