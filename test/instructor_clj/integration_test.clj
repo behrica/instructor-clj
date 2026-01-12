@@ -80,12 +80,12 @@
           (is (int? (:age response)) "Age should be an integer"))
         
         ;; Test explicit provider specification
-        (let [response (icc/instruct "Bob Johnson is 35 years old."
-                                     User
-                                     :api-key api-key
-                                     :model "gpt-3.5-turbo"
-                                     :provider :openai
-                                     :max-retries 0)]
+        (let [response (icc/instruct {:prompt "Bob Johnson is 35 years old."
+                                      :response-schema User
+                                      :provider :openai
+                                      :max-retries 0
+                                      :model "gpt-3.5-turbo"}
+                                     {:api-key api-key})]
           (is (some? response) "Explicit provider response should not be nil")
           (is (string? (:name response)) "Name should be a string")
           (is (int? (:age response)) "Age should be an integer"))))))
@@ -161,7 +161,6 @@
                   [:age :int]]
             response (icc/instruct {:prompt "Emily Brown is 42 years old."
                                     :response-schema User
-
                                     :provider :anthropic
                                     :model "claude-3-haiku-20240307"
                                     :max-retries 0}
