@@ -63,6 +63,22 @@
   (mapv normalize-message messages))
 
 
+(defn-  call_completion [messages params config]
+  (let [
+        model (:model params)
+        provider (:provider params)
+        
+        
+        ;; Build request map
+        request-map {:messages messages}
+        ;; Call litellm with new 0.3.0-alpha API
+        
+        body (litellm/completion provider model request-map config)
+        response (parse-generated-body body)]
+    (when (m/validate (:response-schema params) response)
+      response))
+  )
+
 (defn llm->response
   "The function performs the LLM call and tries to destructure and get the actual response.
    Returns nil in cases where the LLM is not able to generate the expected response.
@@ -74,18 +90,10 @@
                    :content (schema->system-prompt (:response-schema params))}
                   {:role :user
                    :content (:prompt params)}]
-        model (:model params)
-        provider (:provider params)
-        
 
-        ;; Build request map
-        request-map {:messages messages}
-        ;; Call litellm with new 0.3.0-alpha API
-        
-        body (litellm/completion provider model request-map config)
-        response (parse-generated-body body)]
-    (when (m/validate (:response-schema params) response)
-      response)))
+        ]
+    (call_completion messages params config)
+    ))
 
 
 
@@ -155,7 +163,6 @@
                                                  [:role [:or :keyword :string]]
                                                  [:content :string]
                                                  ]]]
-                        [:max-retries {:optional true} :int]
                         [:provider :keyword]
                         [:model :string]]
                        :map] :any]}
@@ -165,21 +172,8 @@
          user-messages (normalize-messages (:messages params))
          messages (apply conj
                          [{:role :system :content (schema->system-prompt response-model)}]
-                         user-messages)
-         model (:model params)
-         ;; Provider must be explicitly provided
-         provider (:provider params)
-
-         ;; Build request map from default params and client params
-         request-map {:messages messages}
-         ;; Build config map
-
-         ;; Call litellm with new 0.3.0-alpha API
-         body (litellm/completion provider model request-map config)
-         response (parse-generated-body body)]
-     (if (m/validate response-model response)
-       response
-       body))))
+                         user-messages)]
+     (call_completion messages params config))))
 
 
 (mi/collect!)
