@@ -91,10 +91,13 @@
 
 
 (defn instruct
-  "Attempts to obtain a valid response from the LLM based on the given prompt and schema,
-   retrying up to `max-retries` times if necessary.
+  "Attempts to obtain a valid response from the LLM based on the given `params` and `config`.
+   See `create-chat-completion` for `params` and `config`.
+   Instead of taking :messages, it takes a `:prompt` as string in `params`
+
+   One extra supported param is `:max-retries`, which is retrying up to x times if necessary.
    
-   Note: API keys can be provided via :api-key parameter or OPENAI_API_KEY environment variable."
+   Note: API keys can be provided via :api-key parameter or environment variables."
   {:malli/schema [:=> [:cat 
                        [:map {:closed true}
                         [:prompt :string]
@@ -119,18 +122,19 @@
 (defn create-chat-completion
   "Creates a chat completion using litellm-clj (supports multiple LLM providers).
 
-   Argument is a map with keys :messages, :model, :response-model, :provider, and optionally :api-key.
-   :messages should be a vector of maps, each map representing a message with keys :role and :content.
-   :model specifies the model to use (e.g., \"gpt-3.5-turbo\", \"claude-3-opus-20240229\", \"gemini-pro\").
-   :response-model is a Malli schema specifying the expected response structure.
-   :provider (required) - must be specified explicitly (e.g., :openai, :anthropic, :gemini, :mistral, :ollama)
-   :api-key (optional) - if not provided, will use environment variable OPENAI_API_KEY
+   Arguments are two maps:
+   
+   `params` is a map with keys :messages, :model, :response-schema, :provider
 
-   Note: API keys can be set via environment variables:
-   - OPENAI_API_KEY for OpenAI models
-   - ANTHROPIC_API_KEY for Anthropic models
-   - GEMINI_API_KEY for Google Gemini models
-   - OPENROUTER_API_KEY for OpenRouter models
+     :messages should be a vector of maps, each map representing a message with keys :role and :content.
+     :model specifies the model to use (e.g., \"gpt-3.5-turbo\", \"claude-3-opus-20240229\", \"gemini-pro\").
+     :response-schema is a Malli schema specifying the expected response structure.
+     :provider - must be specified explicitly (e.g., :openai, :anthropic, :gemini, :mistral, :ollama)
+
+   `config` is a map with LLM specific configs, passed directly to litellm-clj
+     :api-key (optional) - A typical keys most LLMs need
+
+   Note: API keys can be set via environment variables for various models, see litellm-clj
 
    Example:
    (require '[instructor-clj.core :as ic])
@@ -144,7 +148,9 @@
     {:messages [{:role \"user\", :content \"Jason Liu is 30 years old\"}]
      :model \"gpt-3.5-turbo\"
      :provider :openai
-     :response-model User})
+     :response-schema User}
+    {} ;assumes `api-key` set as environment var
+   )
 
    Returns a map with extracted information in a structured format."
   {:malli/schema [:=> [:cat

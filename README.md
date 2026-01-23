@@ -23,15 +23,17 @@ Built on top of [Malli](https://github.com/metosin/malli) for defining schemas a
 ```clojure
 (require '[instructor-clj.core :as ic])
 
+
 (def User
   [:map
    [:name :string]
    [:age :int]])
 
-(ic/instruct "Kapil Reddy is almost 40 years old."
-             User
-             :api-key "<API-KEY>"
-             :provider :openai)
+(ic/instruct {:prompt "Kapil Reddy is almost 40 years old."
+              :response-schema User
+              :provider :openai
+              :model "gpt-5"}
+             {:api-key "<API-KEY>"})
 ; => {:name "John Doe", :age 30}
 ```
 
@@ -48,12 +50,12 @@ Built on top of [Malli](https://github.com/metosin/malli) for defining schemas a
           [:string]]]])
 
 ; With retries:
-(ic/instruct "Call Kapil on Saturday at 12pm"
-             Meeting
-             :api-key api-key
-             :provider :openai
-             :model "gpt-4"
-             :max-retries 2)
+(ic/instruct {:prompt "Call Kapil on Saturday at 12pm"
+              :response-schema Meeting
+              :provider :openai
+              :model "gpt-5"
+              :max-retries 2}
+             {:api-key "<API-KEY>"})
 ; => {:action "call", :person "Kapil", :time "12pm", :day "Saturday"}
 ```
 
@@ -64,8 +66,8 @@ Using `create-chat-completion` for more control:
  {:messages [{:role :user :content "Call Kapil on Saturday at 12pm"}]
   :model "gpt-3.5-turbo"
   :provider :openai
-  :response-model Meeting
-  :api-key api-key})
+  :response-schema Meeting}
+ {:api-key "<API-KEY>"})
 ; => {:action "call", :person "Kapil", :time "12pm", :day "Saturday"}
 ```
 
@@ -74,12 +76,12 @@ With additional parameters:
 ```clojure
 (ic/create-chat-completion
  {:messages [{:role :user :content "Call Kapil on Saturday at 12pm"}]
-  :model "gpt-4"
-  :temperature 0.5
-  :max-tokens 1000
+  :model "gpt-3.5-turbo"
   :provider :openai
-  :response-model Meeting
-  :api-key api-key})
+  :response-schema Meeting}
+ {:api-key "<API-KEY>"
+  :temperature 0.5
+  :max-tokens 1000})
 ```
 
 ## Installation
@@ -127,7 +129,7 @@ clojure -T:build deploy
 Simple API for structured output from a prompt.
 
 ```clojure
-(instruct prompt schema & {:keys [api-key model temperature max-retries provider]})
+(instruct params config) ; params contains :prompt
 ```
 
 ### `create-chat-completion`
@@ -137,9 +139,10 @@ More explicit API with full control over messages and parameters.
 ```clojure
 (create-chat-completion {:messages [...] 
                          :model "gpt-3.5-turbo"
-                         :response-model schema
-                         :api-key "..."
-                         :provider :openai})
+                         :response-schema schema
+                         :provider :openai}
+                        {:api-key "..."}
+                        )
 ```
 
 **Note:** Message roles can be either strings or keywords (`:user`, `:assistant`, `:system`, `:tool`).
@@ -149,18 +152,22 @@ More explicit API with full control over messages and parameters.
 instructor-clj supports multiple LLM providers through [litellm-clj](https://github.com/unravel-team/clj-litellm):
 
 - **OpenAI**: `gpt-3.5-turbo`, `gpt-4`, `gpt-4o`, etc.
+   - as well Azure OpenAI
 - **Anthropic**: `claude-3-opus-20240229`, `claude-3-sonnet-20240229`, etc.
 - **Google Gemini**: `gemini-pro`, `gemini-1.5-pro`, etc.
 - **Mistral**: `mistral-medium`, `mistral-large`, etc.
 - **Ollama**: `llama3`, `mixtral`, `phi`, etc.
 - **OpenRouter**: Any model in format `provider/model`
 
-Set appropriate API keys via environment variables:
+
+Set appropriate API keys via environment variables or specify as :api-key.
 - `OPENAI_API_KEY` for OpenAI
 - `ANTHROPIC_API_KEY` for Anthropic
 - `GEMINI_API_KEY` for Google Gemini
 - `OPENROUTER_API_KEY` for OpenRouter
+.... 
 
+as supported by litellm-clj
 ## License
 
 This project is licensed under the terms of the MIT License.
