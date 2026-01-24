@@ -75,7 +75,7 @@
     (when (m/validate (:response-schema params) response)
       response)))
 
-(defn- llm->response
+(defn llm->response
   "The function performs the LLM call and tries to destructure and get the actual response.
    Returns nil in cases where the LLM is not able to generate the expected response.
    
