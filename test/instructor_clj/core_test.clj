@@ -72,6 +72,74 @@
                              {:api-key "api-key"})))))))
 
 
+(deftest test-message-normalization
+  (testing "message normalization converts string roles to keywords"
+    (let [User [:map
+                [:name :string]
+                [:age :int]]
+          valid-response {:choices [{:message {:content "{\"name\": \"John\", \"age\": 30}"}}]}
+
+          ;; Track the normalized messages that get passed to litellm
+          captured-messages (atom nil)]
+
+      (testing "messages with string roles are normalized to keywords"
+        (bond/with-stub! [[litellm/completion (fn [_provider _model request-map _config]
+                                                (reset! captured-messages (:messages request-map))
+                                                valid-response)]]
+          (icc/create-chat-completion
+           {:messages [{:role "user" :content "Hello"}
+                       {:role "assistant" :content "Hi there"}
+                       {:role "user" :content "Tell me about John"}]
+            :response-schema User
+            :provider :openai
+            :model "dummy"}
+           {:api-key "api-key"})
+
+          ;; Verify all roles in the captured messages are keywords
+          (is (every? keyword? (map :role @captured-messages)))
+          ;; Verify the user messages are preserved (system message is prepended)
+          (is (= 4 (count @captured-messages))) ;; 1 system + 3 user messages
+          (is (= :system (:role (first @captured-messages))))
+          (is (= :user (:role (second @captured-messages))))
+          (is (= :assistant (:role (nth @captured-messages 2))))
+          (is (= :user (:role (nth @captured-messages 3))))))
+
+      (testing "messages with keyword roles remain unchanged"
+        (bond/with-stub! [[litellm/completion (fn [_provider _model request-map _config]
+                                                (reset! captured-messages (:messages request-map))
+                                                valid-response)]]
+          (icc/create-chat-completion
+           {:messages [{:role :user :content "Hello"}
+                       {:role :assistant :content "Hi there"}]
+            :response-schema User
+            :provider :openai
+            :model "dummy"}
+           {:api-key "api-key"})
+
+          ;; Verify all roles remain keywords
+          (is (every? keyword? (map :role @captured-messages)))
+          (is (= 3 (count @captured-messages))) ;; 1 system + 2 user messages
+          (is (= :user (:role (second @captured-messages))))
+          (is (= :assistant (:role (nth @captured-messages 2))))))
+
+      (testing "mixed string and keyword roles are all normalized"
+        (bond/with-stub! [[litellm/completion (fn [_provider _model request-map _config]
+                                                (reset! captured-messages (:messages request-map))
+                                                valid-response)]]
+          (icc/create-chat-completion
+           {:messages [{:role "user" :content "First message"}      ;; string
+                       {:role :assistant :content "Response"}        ;; keyword
+                       {:role "user" :content "Second message"}]     ;; string
+            :response-schema User
+            :provider :openai
+            :model "dummy"}
+           {:api-key "api-key"})
+
+          ;; All roles should be keywords
+          (is (every? keyword? (map :role @captured-messages)))
+          (is (= 4 (count @captured-messages))))))))
+
+
 (deftest test-instruct-with-invalid-json
   (testing "instruct handles invalid JSON from LLM"
     (let [User [:map
